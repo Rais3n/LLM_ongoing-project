@@ -1,8 +1,9 @@
 package pl.clockworkjava.email;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class EmailResponse {
-    String respone;
-    List<String> tasks;
+    public String response;
+    public List<String> tasks = new ArrayList<>();
 }

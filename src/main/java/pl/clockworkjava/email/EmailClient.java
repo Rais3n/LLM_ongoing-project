@@ -39,11 +39,12 @@ public class EmailClient {
         connect();
         int total = inbox.getMessageCount();
         int end = total;
-        int start = Math.max(1, total - 30 + 1);
-        Message[] last30 = inbox.getMessages(start, end);
+        int numOfMails = 10;
+        int start = Math.max(1, total - numOfMails + 1);
+        Message[] last10 = inbox.getMessages(start, end);
 
-        for (Message msg : last30){
-            if (msg.isSet(Flags.Flag.SEEN)){
+        for (Message msg : last10){
+            if (!msg.isSet(Flags.Flag.SEEN)){
                 emails.add(mapToEmail(msg));
             }
         }

@@ -1,6 +1,10 @@
 package pl.clockworkjava;
 
+import pl.clockworkjava.email.EmailResponse;
 import pl.clockworkjava.email.EmailSummarizer;
+import pl.clockworkjava.tasks.TaskManager;
+
+import java.util.List;
 
 public class Orchestrator {
 
@@ -9,11 +13,13 @@ public class Orchestrator {
     MeetingScheduler meetingScheduler = new MeetingScheduler();
     EmailSummarizer emailSummarizer = new EmailSummarizer();
 
-    private AgentRouter agentRouter = new AgentRouter();
+    private final AgentRouter agentRouter = new AgentRouter();
 
     public String handleMessage(String userMessage){
 
-        String agent = agentRouter.route(userMessage);
+        EmailResponse emailResponse;
+        String agent;// = agentRouter.route(userMessage);
+        String finalResponse;
 
         agent = "Email Summarizer"; //DEBUGOWANIE
         switch (agent){
@@ -24,7 +30,10 @@ public class Orchestrator {
                 meetingScheduler.respond(userMessage);
                 break;
             case "Email Summarizer":
-                emailSummarizer.respond(userMessage);
+                emailResponse =  emailSummarizer.respond(userMessage);
+                List<String> tasks = emailResponse.tasks;
+                if(!tasks.isEmpty())
+                    taskManager.manageTaskList(tasks);
                 break;
             default:
                 break;

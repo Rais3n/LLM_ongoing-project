@@ -27,29 +27,6 @@ public class AgentRouter {
                 "Meeting Scheduler", List.of("Schedule a meeting", "Check availability", "Set appointment")
         );
 
-        for (Map.Entry<String, List<String>> entry : categoryExamples.entrySet()) {
-            List<float[]> exampleEmbeddings = entry.getValue().stream()
-                    .map(this::getEmbeddings)
-                    .toList();
-
-            embeddings.put(entry.getKey(), averageEmbeddings(exampleEmbeddings));
-        }
-    }
-
-    private float[] averageEmbeddings(List<float[]> embeddings){
-        float[] resultVector = null;
-        int dim =  0;
-        int numOfVectors=1;
-        if(!embeddings.isEmpty()) {
-            dim = embeddings.get(0).length;
-            resultVector = new float[dim];
-            numOfVectors = embeddings.size();
-        }
-        for(float[] vector : embeddings)
-            for(int i=0;i<dim;i++){
-                resultVector[i] += vector[i]/numOfVectors;
-            }
-        return  resultVector;
     }
 
     public String route(String userMessage) {
