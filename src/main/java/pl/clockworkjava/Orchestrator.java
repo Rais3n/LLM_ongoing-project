@@ -30,10 +30,10 @@ public class Orchestrator {
                 meetingScheduler.respond(userMessage);
                 break;
             case "Email Summarizer":
-                emailResponse =  emailSummarizer.respond(userMessage);
-                List<String> tasks = emailResponse.tasks;
-                if(!tasks.isEmpty())
-                    taskManager.manageTaskList(tasks);
+                emailResponse =  emailSummarizer.respond();
+                taskManager.setTasks(emailResponse.tasks);
+                if(!taskManager.getTasks().isEmpty())
+                    taskManager.manageTaskList();
                 break;
             default:
                 break;
