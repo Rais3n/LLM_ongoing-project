@@ -6,7 +6,6 @@ import java.util.List;
 import javax.mail.*;
 import java.util.*;
 import javax.mail.internet.MimeMultipart;
-import javax.mail.search.FlagTerm;
 import org.jsoup.Jsoup;
 
 public class EmailClient {
