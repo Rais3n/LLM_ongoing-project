@@ -1,22 +1,21 @@
-package pl.clockworkjava.tasks;
+package pl.clockworkjava.aiTools;
 
 import java.time.LocalDateTime;
 
 import com.google.api.services.tasks.Tasks;
 import com.google.api.services.tasks.model.Task;
-import pl.clockworkjava.GoogleTasksService;
+import pl.clockworkjava.service.GoogleTasksService;
 
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-public class TasksBackend {
+public class TaskTools {
 
     private Tasks service;
 
-    TasksBackend(){
+    public TaskTools(){
         try {
             service = GoogleTasksService.getService();
         } catch (Exception e) {
@@ -26,11 +25,14 @@ public class TasksBackend {
     }
 
     public void addTask(LocalDateTime dateTime, String task) {
-        String dueDateString = dateTime.atOffset(ZoneOffset.UTC)
-                .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
         Task newTask = new Task()
-                .setTitle(task)
-                .setDue(dueDateString);
+                .setTitle(task);
+
+        if(dateTime != null){
+            String dueDateString = dateTime.atOffset(ZoneOffset.UTC)
+                    .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+            newTask.setDue(dueDateString);
+        }
 
         try {
             service.tasks().insert("@default", newTask).execute();
@@ -42,6 +44,7 @@ public class TasksBackend {
     }
 
     public void updateTask(String oldTaskTitle, String newTitle, LocalDateTime newDateTime) {
+        System.out.println("Task updated: " + newTitle);
         String taskId = getTaskId(oldTaskTitle);
         String dueDateString = newDateTime.atOffset(ZoneOffset.UTC)
                 .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
@@ -52,8 +55,6 @@ public class TasksBackend {
             task.setDue(dueDateString);
 
             service.tasks().update("@default", taskId, task).execute();
-
-            System.out.println("Task updated: " + newTitle);
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -70,13 +71,13 @@ public class TasksBackend {
         }
     }
 
-    public List<Task> getTasks() {
+    private List<Task> getTasks() {
         try {
-            return service.tasks().list("@default").execute().getItems();
+             return service.tasks().list("@default").execute().getItems();
         } catch (Exception e) {
             e.printStackTrace();
-            return Collections.emptyList();
         }
+        return Collections.emptyList();
     }
 
     private String getTaskId(String taskTitle) {
@@ -91,5 +92,16 @@ public class TasksBackend {
             e.printStackTrace();
         }
         return null;
+    }
+
+    public List<String> getTasksToString(){
+        try {
+            List<Task> list = service.tasks().list("@default").execute().getItems();
+            List<String> tasks = list.stream().map(Task::getTitle).toList();
+            return tasks;
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return Collections.emptyList();
     }
 }

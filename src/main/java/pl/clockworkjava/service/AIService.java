@@ -1,4 +1,4 @@
-package pl.clockworkjava;
+package pl.clockworkjava.service;
 
 import okhttp3.*;
 import org.json.JSONArray;
@@ -33,6 +33,11 @@ public class AIService {
         return getResponseAIFromJSON(finalAnswer);
     }
 
+    private static String getResponseAIFromJSON(JSONObject finalAnswer){
+        JSONArray jsonArr = finalAnswer.getJSONArray("choices");
+        return jsonArr.getJSONObject(0).getJSONObject("message").getString("content");
+    }
+
     private static Request createRequest(String HF_URL, String HF_TOKEN, JSONObject json){
         RequestBody requestBody = RequestBody.create(json.toString(),
                 MediaType.parse("application/json"));
@@ -56,8 +61,4 @@ public class AIService {
         json.put("messages", containerForPrompt);
     }
 
-    private static String getResponseAIFromJSON(JSONObject finalAnswer){
-        JSONArray jsonArr = finalAnswer.getJSONArray("choices");
-        return jsonArr.getJSONObject(0).getJSONObject("message").getString("content");
-    }
 }

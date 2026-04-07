@@ -1,4 +1,4 @@
-package pl.clockworkjava;
+package pl.clockworkjava.service;
 
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
 import com.google.api.client.json.jackson2.JacksonFactory;

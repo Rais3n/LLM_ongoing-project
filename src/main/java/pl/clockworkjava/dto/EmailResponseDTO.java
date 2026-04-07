@@ -1,9 +1,9 @@
-package pl.clockworkjava.email;
+package pl.clockworkjava.dto;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public class EmailResponse {
+public class EmailResponseDTO {
     public String response;
     public List<String> tasks = new ArrayList<>();
 }

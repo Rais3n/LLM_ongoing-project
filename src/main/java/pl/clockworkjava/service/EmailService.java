@@ -1,12 +1,14 @@
-package pl.clockworkjava.email;
+package pl.clockworkjava.service;
 
-import pl.clockworkjava.AIService;
+import pl.clockworkjava.infrastructure.EmailClient;
 import pl.clockworkjava.PromptProvider;
+import pl.clockworkjava.model.Email;
+import pl.clockworkjava.dto.EmailResponseDTO;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public class EmailSummarizer {
+public class EmailService {
 
     private final String HF_URL = "https://router.huggingface.co/v1/chat/completions";
     private  final String HF_TOKEN = System.getenv("HF_TOKEN");
@@ -14,7 +16,7 @@ public class EmailSummarizer {
 
     EmailClient emailClient = new EmailClient();
 
-    public EmailResponse respond(){
+    public EmailResponseDTO respond(){
         List<Email> emails = new ArrayList<>();
         try {
             emails = emailClient.fetchUnreadMails();
@@ -24,9 +26,9 @@ public class EmailSummarizer {
         return getAIResponse(emails);
     }
 
-    private EmailResponse getAIResponse(List<Email> emails){
+    private EmailResponseDTO getAIResponse(List<Email> emails){
         StringBuilder stringBuilder = new StringBuilder();
-        EmailResponse response = new EmailResponse();
+        EmailResponseDTO response = new EmailResponseDTO();
         try {
             String message;
             for (Email mail : emails) {

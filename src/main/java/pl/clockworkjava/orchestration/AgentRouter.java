@@ -1,4 +1,4 @@
-package pl.clockworkjava;
+package pl.clockworkjava.orchestration;
 
 
 import java.util.*;

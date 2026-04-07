@@ -1,4 +1,4 @@
-package pl.clockworkjava.email;
+package pl.clockworkjava.infrastructure;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -7,6 +7,7 @@ import javax.mail.*;
 import java.util.*;
 import javax.mail.internet.MimeMultipart;
 import org.jsoup.Jsoup;
+import pl.clockworkjava.model.Email;
 
 public class EmailClient {
     private Store store;
