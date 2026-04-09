@@ -20,7 +20,7 @@ public class Main {
             }
             String response = orchestrator.handleMessage(userMessage);
 
-            //System.out.println("Assistant: " + response);
+            System.out.println("Assistant: " + response);
         }
     }
 }

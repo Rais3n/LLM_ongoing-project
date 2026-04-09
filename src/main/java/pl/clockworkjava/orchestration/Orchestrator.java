@@ -15,17 +15,24 @@ public class Orchestrator {
     public String handleMessage(String userMessage){
 
         EmailResponseDTO emailResponseDTO;
-        String agent;// = agentRouter.route(userMessage);
-        String finalResponse;
+        String agent ="";
+        try {
+            agent = agentRouter.route(userMessage);
+        }
+        catch (Exception e){
+            e.printStackTrace();
+        }
+        String finalResponse = new String();
 
-        agent = "Email Summarizer"; //DEBUGOWANIE
         switch (agent){
             case "Task Manager":
                 taskService.respond(userMessage);
+                finalResponse = "Work is done!";
                 break;
             case "Email Summarizer":
                 emailResponseDTO =  emailService.respond();
-                taskService.setTasks(emailResponseDTO.tasks);
+                System.out.println(emailResponseDTO.response);
+                taskService.setTasks(emailResponseDTO.getTasks());
                 if(!taskService.getTasks().isEmpty())
                     taskService.manageTaskList();
                 break;
@@ -33,7 +40,6 @@ public class Orchestrator {
                 break;
         }
 
-
-        return agent;
+        return finalResponse;
     }
 }

@@ -4,27 +4,59 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import pl.clockworkjava.PromptProvider;
 import pl.clockworkjava.aiTools.TaskTools;
+import pl.clockworkjava.model.Task;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Scanner;
+import java.util.stream.Collectors;
 
 public class TaskService {
 
-    private List<String> tasks;
+    private List<Task> tasks;
 
     private TaskTools taskTools = new TaskTools();
     private final String HF_URL = "https://router.huggingface.co/v1/chat/completions";
     private  final String HF_TOKEN = System.getenv("HF_TOKEN");
     private final String model = "meta-llama/Llama-3.1-8B-Instruct:novita";
 
-    public void setTasks(List<String> tasks) {
+    public void setTasks(List<Task> tasks) {
         this.tasks = tasks;
     }
 
-    public List<String> getTasks() {
+    public List<Task> getTasks() {
         return tasks;
+    }
+
+    private Task convertJsonToTask(JSONObject jsonTask){
+        Task task = new Task();
+        JSONObject parametersJSON = jsonTask.getJSONObject("arguments");
+        String taskName;
+        String oldTaskName;
+
+        LocalDateTime dateTime;
+
+        if(!parametersJSON.isNull("date")) {
+            dateTime = LocalDateTime.parse(parametersJSON.getString("date"));
+        }
+        else {
+            dateTime = null;
+        }
+
+        if(parametersJSON.has("taskName"))
+            taskName = parametersJSON.getString("taskName");
+        else{
+            JSONArray tasks = parametersJSON.getJSONArray("taskNames");
+            taskName =  tasks.getString(1);
+            oldTaskName = tasks.getString(0);
+            task.setOldName(oldTaskName);
+        }
+
+        task.setDateTime(dateTime);
+        task.setName(taskName);
+
+        return task;
     }
 
     public void respond(String userMessage){
@@ -32,34 +64,23 @@ public class TaskService {
         System.out.println(tool);
 
         JSONObject json = new JSONObject(tool);
-        int amountOfActions = json.getJSONArray("tools").length();
-        for (int i = 0;i<amountOfActions;i++){
+
+        int numberOfTasks = json.getJSONArray("tools").length();
+        for (int i = 0;i<numberOfTasks;i++){
             JSONObject actionJSON = json.getJSONArray("tools").getJSONObject(i);
             String methodName = actionJSON.getString("name");
-            String taskName;
-            String oldTaskName = null;
-            JSONObject parametersJSON = actionJSON.getJSONObject("arguments");
-            LocalDateTime dateTime;
-            if(!parametersJSON.isNull("date"))
-                dateTime = LocalDateTime.parse(parametersJSON.getString("date"));
-            else
-                dateTime = null;
-            if(parametersJSON.has("taskName"))
-                taskName = parametersJSON.getString("taskName");
-            else{
-                JSONArray tasks = parametersJSON.getJSONArray("taskNames");
-                taskName =  tasks.getString(1);
-                oldTaskName = tasks.getString(0);
-            }
+
+            Task task = convertJsonToTask(actionJSON);
+
             switch (methodName){
                 case "addTask":
-                    taskTools.addTask(dateTime,taskName);
+                    taskTools.addTask(task.getDateTime(),task.getName());
                     break;
                 case "updateTask":
-                    taskTools.updateTask(oldTaskName, taskName, dateTime);
+                    taskTools.updateTask(task.getOldName(), task.getName(), task.getDateTime());
                     break;
                 case "deleteTask":
-                    taskTools.deleteTask(taskName);
+                    taskTools.deleteTask(task.getName());
                     break;
                 case "getTasks":
                     List<String> tasks = taskTools.getTasksToString();
@@ -76,38 +97,7 @@ public class TaskService {
 
     private String callTool(String userMessage){
         LocalDate today = LocalDate.now();
-        String instructions = "Today is " + today+ "\n"+
-                "You are servant whose goal is to decide, based " +
-                "on user message which method should be called."+
-                "Possible methods to call:" + "\n" +
-                "addTask(LocalDateTime dateTime, String task)," + "\n" +
-                "updateTask(String taskName0,  String taskName1, LocalDateTime dateTime)," + "\n" +
-                "deleteTask(LocalDateTime dateTime, String task)," + "\n" +
-                "getTasks()" + "\n" +
-                "In method updateTask, jsonArray taskNames always has to contain 2 objects"+
-                "\n" + "Response in the given JSON format: "+ "\n" +
-                "{\n" +
-                "  \"tools\": [\n" +
-                "    {\n" +
-                "      \"name\": \"addTask\",\n" +
-                "      \"arguments\": {\n" +
-                "        \"taskName\": \"clean room\",\n" +
-                "        \"date\": \"2026-03-30T10:00\"\n" +
-                "      }\n" +
-                "    },\n" +
-                "    {\n" +
-                "      \"name\": \"updateTask\",\n" +
-                "      \"arguments\": {\n" +
-                "        \"taskNames\": [\"vacuum the floor\", \"cook dinner\"],\n" +
-                "        \"date\": null\n" +
-                "      }\n" +
-                "    }\n" +
-                "  ]\n" +
-                "}" + "\n" +
-                "If no methods fit, return: { \"Tools\": [] }\n"+
-                "Date in JSON has to be in format yyyy-mm-ddThh-mm. However if user did not provide exact time I want date to be null.\n"+
-                "DO NOT add any extra text or explanation.\n" +
-                "Now u will get user input: \n" ;
+        String instructions = today + PromptProvider.getPrompt("callToolPrompt.txt");
         return AIService.SendRequestAndGetAnswer(HF_URL,HF_TOKEN,model,instructions + userMessage);
     }
 
@@ -115,7 +105,7 @@ public class TaskService {
         tasks.clear();
     }
 
-    private void addTasksFromString(String jsonTasksToAdd){
+    private void addTasksToCalendar(String jsonTasksToAdd){
         JSONObject json = new JSONObject(jsonTasksToAdd);
         JSONArray tasksArray = json.getJSONArray("tasksToAdd");
 
@@ -141,7 +131,7 @@ public class TaskService {
 
     private String askUserWhichTasksAdd(){
         Scanner scanner =  new Scanner(System.in);
-        tasks.stream().forEach(System.out::println);
+        tasks.stream().map(Task::getName).forEach(System.out::println);
         String system = "There are some tasks detected in your email. Do u want to add them to your to-do-list? If so then which one?";
         System.out.println(system);
         System.out.print("You: ");
@@ -152,11 +142,12 @@ public class TaskService {
 
     public void manageTaskList(){
         String taskListToAdd = askUserWhichTasksAdd();
-        addTasksFromString(taskListToAdd);
+        System.out.println(taskListToAdd);
+        addTasksToCalendar(taskListToAdd);
     }
 
     private String getTasksToDo(String userInput){
-        String instructions = PromptProvider.getPrompt("selectToolPrompt.txt") + userInput + String.join("\n",tasks);
+        String instructions = PromptProvider.getPrompt("filteringTaskListPrompt.txt") + userInput + tasks.stream().map(Task::getName).collect(Collectors.joining("\n"));
         String responseAI;
         responseAI = AIService.SendRequestAndGetAnswer(HF_URL, HF_TOKEN, model,instructions);
         clearTaskList();

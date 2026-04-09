@@ -9,16 +9,15 @@ import org.json.JSONObject;
 
 import java.io.IOException;
 
-import org.apache.commons.math3.linear.ArrayRealVector;
-import org.apache.commons.math3.linear.RealVector;
-
 public class AgentRouter {
-
-    private Map<String, float[]> embeddings = new HashMap<>();
     private final String HF_URL = "https://router.huggingface.co/scaleway/v1/embeddings";
     ;
     private final String HF_TOKEN = System.getenv("HF_TOKEN");
-    private final OkHttpClient client = new OkHttpClient();
+    private final OkHttpClient client = new OkHttpClient.Builder()
+            .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+            .writeTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+            .build();
 
     AgentRouter() {
         Map<String, List<String>> categoryExamples = Map.of(
@@ -27,50 +26,31 @@ public class AgentRouter {
                 "Meeting Scheduler", List.of("Schedule a meeting", "Check availability", "Set appointment")
         );
 
+        uploadCategoriesToQdrant(categoryExamples);
+
     }
 
-    public String route(String userMessage) {
-        String agent = null;
-        float[] userEmbedding = getEmbeddings(userMessage);
-
-        List<Map.Entry<String,Double>> topEntries = embeddings.entrySet()
-                .stream()
-                .map(entry -> (Map.Entry<String, Double>) new AbstractMap.SimpleEntry<>(
-                        entry.getKey(),
-                        cosineSimilarity(userEmbedding, entry.getValue())
-                ))
-                .sorted(Map.Entry.<String,Double>comparingByValue(Comparator.reverseOrder()))
-                .limit(3)
-                .toList();
-        agent = topEntries.getFirst().getKey();
-
-        topEntries.stream().forEach(System.out::println);
-
-        return agent;
-    }
-
-    private double[] toDoubleArray(float[] vector){
-        double[] result = new double[vector.length];
-        for(int i =0;i< vector.length;i++){
-            result[i] = vector[i];
+    private float[] averageEmbeddings(List<float[]> embeddings){
+        float[] resultVector = null;
+        int dim =  0;
+        int numOfVectors=1;
+        if(!embeddings.isEmpty()) {
+            dim = embeddings.get(0).length;
+            resultVector = new float[dim];
+            numOfVectors = embeddings.size();
         }
-        return result;
+        for(float[] vector : embeddings)
+            for(int i=0;i<dim;i++){
+                resultVector[i] += vector[i]/numOfVectors;
+            }
+        return  resultVector;
     }
 
-    private double cosineSimilarity(float[] vec1, float[] vec2){
-          RealVector v1 = new ArrayRealVector(toDoubleArray(vec1));
-          RealVector v2 = new ArrayRealVector(toDoubleArray(vec2));
-          double dotProduct = v1.dotProduct(v2);
-          double normProduct = v1.getNorm()*v2.getNorm();
 
-          return dotProduct / normProduct;
-
-    }
-
-    private float[] getEmbeddings(String label) {
+    private float[] getEmbeddings(String expressionToEmbedding) {
         try {
             JSONObject json = new JSONObject();
-            json.put("input", label);
+            json.put("input", expressionToEmbedding);
             json.put("model", "qwen3-embedding-8b");
             RequestBody body = RequestBody.create(json.toString(), MediaType.parse("application/json"));
             Request request = new Request.Builder()
@@ -97,6 +77,97 @@ public class AgentRouter {
             e.printStackTrace();
             return null;
 
+        }
+    }
+
+    private void uploadCategoriesToQdrant(Map<String, List<String>> categoryExamples) {
+        String collectionName = "categories";
+        if (!isCollectionEmpty(collectionName)) {
+            System.out.println("Collection already has embeddings. Skipping upload.");
+            return;
+        }
+
+        System.out.println("Uploading category embeddings...");
+
+        Map<String, float[]> embeddings = new HashMap<>();
+        for (Map.Entry<String, List<String>> entry : categoryExamples.entrySet()) {
+            List<float[]> exampleEmbeddings = entry.getValue().stream()
+                    .map(this::getEmbeddings)
+                    .toList();
+            embeddings.put(entry.getKey(), averageEmbeddings(exampleEmbeddings));
+        }
+
+        embeddings.forEach((category, vector) -> {
+            try {
+                JSONObject payload = new JSONObject();
+                payload.put("category", category);
+                payload.put("examples", new JSONArray(categoryExamples.get(category)));
+
+                JSONObject point = new JSONObject();
+                point.put("id", UUID.randomUUID().toString());
+                point.put("vector", new JSONArray(vector));
+                point.put("payload", payload);
+
+                JSONObject bodyJson = new JSONObject();
+                bodyJson.put("points", new JSONArray().put(point));
+
+                RequestBody body = RequestBody.create(bodyJson.toString(),
+                        MediaType.parse("application/json"));
+
+                Request request = new Request.Builder()
+                        .url("http://localhost:6333/collections/categories/points")
+                        .put(body)
+                        .build();
+
+                Response response = client.newCall(request).execute();
+                System.out.println("Uploaded " + category + ": " + response.body().string());
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        });
+    }
+
+    public String route(String userMessage) throws IOException {
+        float[] userEmbedding = getEmbeddings(userMessage);
+
+        JSONObject searchJson = new JSONObject();
+        searchJson.put("vector", new JSONArray(userEmbedding));
+        searchJson.put("limit", 1);
+        searchJson.put("with_payload", true);
+
+        RequestBody body = RequestBody.create(searchJson.toString(),
+                MediaType.parse("application/json"));
+
+        Request request = new Request.Builder()
+                .url("http://localhost:6333/collections/categories/points/search")
+                .post(body)
+                .build();
+
+        Response response = client.newCall(request).execute();
+        JSONObject jsonResponse = new JSONObject(response.body().string());
+        JSONArray result = jsonResponse.getJSONArray("result");
+        if (result.length() > 0) {
+            JSONObject first = result.getJSONObject(0);
+            return first.getJSONObject("payload").getString("category");
+        }
+        return null;
+    }
+
+
+    private boolean isCollectionEmpty(String collectionName) {
+        try {
+            Request request = new Request.Builder()
+                    .url("http://localhost:6333/collections/" + collectionName)
+                    .get()
+                    .build();
+
+            Response response = client.newCall(request).execute();
+            JSONObject jsonResponse = new JSONObject(response.body().string());
+            int count = jsonResponse.getJSONObject("result").getInt("points_count");
+            return count == 0;
+        } catch (IOException e) {
+            e.printStackTrace();
+            return true;
         }
     }
 }

@@ -4,6 +4,7 @@ import pl.clockworkjava.infrastructure.EmailClient;
 import pl.clockworkjava.PromptProvider;
 import pl.clockworkjava.model.Email;
 import pl.clockworkjava.dto.EmailResponseDTO;
+import pl.clockworkjava.model.Task;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -35,7 +36,8 @@ public class EmailService {
                 message = PromptProvider.getPrompt("summarizationPrompt.txt") +
                         "Message from: " + mail.sender + " with the subject " + mail.subject + " " + mail.sender + " writes: " + mail.body;
                 String mailTask = AIService.SendRequestAndGetAnswer(HF_URL,HF_TOKEN, LlamaModel,message);
-                response.tasks.add(mailTask);
+                Task task = new Task(mailTask);
+                response.tasks.add(task);
                 stringBuilder.append(mailTask);
             }
             stringBuilder.insert(0, PromptProvider.getPrompt("finalSummarizationPrompt.txt") + stringBuilder);
