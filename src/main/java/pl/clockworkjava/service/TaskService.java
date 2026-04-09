@@ -131,6 +131,7 @@ public class TaskService {
 
     private String askUserWhichTasksAdd(){
         Scanner scanner =  new Scanner(System.in);
+        System.out.println("------------------------------------------------------------------------------------------------------");
         tasks.stream().map(Task::getName).forEach(System.out::println);
         String system = "There are some tasks detected in your email. Do u want to add them to your to-do-list? If so then which one?";
         System.out.println(system);

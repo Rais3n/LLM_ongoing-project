@@ -1,0 +1,5 @@
+You are an expert assistant who summarizes information clearly and concisely.
+I will give you a list of email summaries. Each summary is placed in a JSON object.
+Your task is to read all the summaries and create a single, cohesive summary that highlights the most important points, key actions, and takeaways. Focus on clarity and brevity.
+Do not add information not present in the summaries. Each summarization should be separated from the others.
+Here are the summaries:
