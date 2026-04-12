@@ -6,40 +6,37 @@ import pl.clockworkjava.service.TaskService;
 
 public class Orchestrator {
 
-
-    TaskService taskService = new TaskService();
-    EmailService emailService = new EmailService();
-
+    private final TaskService taskService = new TaskService();
+    private final EmailService emailService = new EmailService();
     private final AgentRouter agentRouter = new AgentRouter();
 
-    public String handleMessage(String userMessage){
-
-        EmailResponseDTO emailResponseDTO;
-        String agent ="";
+    public String handleMessage(String userMessage) {
+        String agent;
         try {
             agent = agentRouter.route(userMessage);
-        }
-        catch (Exception e){
+        } catch (Exception e) {
             e.printStackTrace();
+            return "I couldn't decide which agent should handle that request.";
         }
-        String finalResponse = new String();
 
-        switch (agent){
+        switch (agent) {
             case "Task Manager":
                 taskService.respond(userMessage);
-                finalResponse = "Work is done!";
-                break;
+                return "Task request processed.";
             case "Email Summarizer":
-                emailResponseDTO =  emailService.respond();
-                System.out.println(emailResponseDTO.response);
+                EmailResponseDTO emailResponseDTO = emailService.respond();
                 taskService.setTasks(emailResponseDTO.getTasks());
-                if(!taskService.getTasks().isEmpty())
-                    taskService.manageTaskList();
-                break;
+                return emailResponseDTO.getResponse();
             default:
-                break;
+                return "I couldn't match that request to an available agent.";
         }
+    }
 
-        return finalResponse;
+    public boolean hasPendingEmailTasks() {
+        return taskService.hasPendingTasks();
+    }
+
+    public void managePendingEmailTasks() {
+        taskService.manageTaskList();
     }
 }

@@ -1,18 +1,25 @@
 package pl.clockworkjava.orchestration;
 
-
-import java.util.*;
-
-import okhttp3.*;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import pl.clockworkjava.AppConfig;
 
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
 
 public class AgentRouter {
-    private final String HF_URL = "https://router.huggingface.co/scaleway/v1/embeddings";
-    ;
-    private final String HF_TOKEN = System.getenv("HF_TOKEN");
+    private final String hfUrl = AppConfig.EMBEDDINGS_URL;
+    private final String hfToken = AppConfig.getHfToken();
     private final OkHttpClient client = new OkHttpClient.Builder()
             .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
             .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
@@ -22,40 +29,49 @@ public class AgentRouter {
     AgentRouter() {
         Map<String, List<String>> categoryExamples = Map.of(
                 "Task Manager", List.of("Add task", "Complete task", "Update task progress"),
-                "Email Summarizer", List.of("Summarize email", "Extract key points from message", "Find action items"),
-                "Meeting Scheduler", List.of("Schedule a meeting", "Check availability", "Set appointment")
+                "Email Summarizer", List.of("Summarize email", "Extract key points from message", "Find action items")
         );
 
-        uploadCategoriesToQdrant(categoryExamples);
+        if (hfToken != null && !hfToken.isBlank()) {
+            uploadCategoriesToQdrant(categoryExamples);
+        }
 
     }
 
-    private float[] averageEmbeddings(List<float[]> embeddings){
-        float[] resultVector = null;
-        int dim =  0;
-        int numOfVectors=1;
-        if(!embeddings.isEmpty()) {
-            dim = embeddings.get(0).length;
-            resultVector = new float[dim];
-            numOfVectors = embeddings.size();
+    private float[] averageEmbeddings(List<float[]> embeddings) {
+        List<float[]> nonNullEmbeddings = embeddings.stream()
+                .filter(Objects::nonNull)
+                .toList();
+
+        if (nonNullEmbeddings.isEmpty()) {
+            return null;
         }
-        for(float[] vector : embeddings)
-            for(int i=0;i<dim;i++){
-                resultVector[i] += vector[i]/numOfVectors;
+
+        int dim = nonNullEmbeddings.get(0).length;
+        float[] resultVector = new float[dim];
+        int numOfVectors = nonNullEmbeddings.size();
+        for (float[] vector : nonNullEmbeddings) {
+            for (int i = 0; i < dim; i++) {
+                resultVector[i] += vector[i] / numOfVectors;
             }
-        return  resultVector;
+        }
+        return resultVector;
     }
 
 
     private float[] getEmbeddings(String expressionToEmbedding) {
+        if (hfToken == null || hfToken.isBlank()) {
+            return null;
+        }
+
         try {
             JSONObject json = new JSONObject();
             json.put("input", expressionToEmbedding);
-            json.put("model", "qwen3-embedding-8b");
+            json.put("model", AppConfig.DEFAULT_EMBEDDING_MODEL);
             RequestBody body = RequestBody.create(json.toString(), MediaType.parse("application/json"));
             Request request = new Request.Builder()
-                    .url(HF_URL)
-                    .header("Authorization", "Bearer " + HF_TOKEN)
+                    .url(hfUrl)
+                    .header("Authorization", "Bearer " + hfToken)
                     .post(body)
                     .build();
             Response response = client.newCall(request).execute();
@@ -94,7 +110,10 @@ public class AgentRouter {
             List<float[]> exampleEmbeddings = entry.getValue().stream()
                     .map(this::getEmbeddings)
                     .toList();
-            embeddings.put(entry.getKey(), averageEmbeddings(exampleEmbeddings));
+            float[] averagedVector = averageEmbeddings(exampleEmbeddings);
+            if (averagedVector != null) {
+                embeddings.put(entry.getKey(), averagedVector);
+            }
         }
 
         embeddings.forEach((category, vector) -> {
@@ -115,7 +134,7 @@ public class AgentRouter {
                         MediaType.parse("application/json"));
 
                 Request request = new Request.Builder()
-                        .url("http://localhost:6333/collections/categories/points")
+                        .url(AppConfig.QDRANT_BASE_URL + "/collections/categories/points")
                         .put(body)
                         .build();
 
@@ -129,6 +148,9 @@ public class AgentRouter {
 
     public String route(String userMessage) throws IOException {
         float[] userEmbedding = getEmbeddings(userMessage);
+        if (userEmbedding == null) {
+            return fallbackRoute(userMessage);
+        }
 
         JSONObject searchJson = new JSONObject();
         searchJson.put("vector", new JSONArray(userEmbedding));
@@ -139,7 +161,7 @@ public class AgentRouter {
                 MediaType.parse("application/json"));
 
         Request request = new Request.Builder()
-                .url("http://localhost:6333/collections/categories/points/search")
+                .url(AppConfig.QDRANT_BASE_URL + "/collections/categories/points/search")
                 .post(body)
                 .build();
 
@@ -150,14 +172,14 @@ public class AgentRouter {
             JSONObject first = result.getJSONObject(0);
             return first.getJSONObject("payload").getString("category");
         }
-        return null;
+        return fallbackRoute(userMessage);
     }
 
 
     private boolean isCollectionEmpty(String collectionName) {
         try {
             Request request = new Request.Builder()
-                    .url("http://localhost:6333/collections/" + collectionName)
+                    .url(AppConfig.QDRANT_BASE_URL + "/collections/" + collectionName)
                     .get()
                     .build();
 
@@ -169,5 +191,13 @@ public class AgentRouter {
             e.printStackTrace();
             return true;
         }
+    }
+
+    private String fallbackRoute(String userMessage) {
+        String normalizedMessage = userMessage == null ? "" : userMessage.toLowerCase(Locale.ROOT);
+        if (normalizedMessage.contains("email") || normalizedMessage.contains("mail") || normalizedMessage.contains("inbox")) {
+            return "Email Summarizer";
+        }
+        return "Task Manager";
     }
 }

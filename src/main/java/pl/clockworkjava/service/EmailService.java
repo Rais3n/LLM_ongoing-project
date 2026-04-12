@@ -1,9 +1,10 @@
 package pl.clockworkjava.service;
 
-import pl.clockworkjava.infrastructure.EmailClient;
+import pl.clockworkjava.AppConfig;
 import pl.clockworkjava.PromptProvider;
-import pl.clockworkjava.model.Email;
 import pl.clockworkjava.dto.EmailResponseDTO;
+import pl.clockworkjava.infrastructure.EmailClient;
+import pl.clockworkjava.model.Email;
 import pl.clockworkjava.model.Task;
 
 import java.util.ArrayList;
@@ -11,40 +12,67 @@ import java.util.List;
 
 public class EmailService {
 
-    private final String HF_URL = "https://router.huggingface.co/v1/chat/completions";
-    private  final String HF_TOKEN = System.getenv("HF_TOKEN");
-    private final String LlamaModel = "meta-llama/Llama-3.1-8B-Instruct:novita";
+    private static final String NO_EMAILS_MESSAGE = "I didn't find any unread emails to summarize.";
 
-    EmailClient emailClient = new EmailClient();
+    private final String hfUrl = AppConfig.CHAT_COMPLETIONS_URL;
+    private final String hfToken = AppConfig.getHfToken();
+    private final String llamaModel = AppConfig.DEFAULT_CHAT_MODEL;
+    private final EmailClient emailClient = new EmailClient();
 
-    public EmailResponseDTO respond(){
+    public EmailResponseDTO respond() {
         List<Email> emails = new ArrayList<>();
         try {
             emails = emailClient.fetchUnreadMails();
         } catch (Exception e) {
             e.printStackTrace();
+            EmailResponseDTO response = new EmailResponseDTO();
+            response.setResponse("I couldn't read your inbox right now.");
+            return response;
         }
+
+        if (emails.isEmpty()) {
+            EmailResponseDTO response = new EmailResponseDTO();
+            response.setResponse(NO_EMAILS_MESSAGE);
+            return response;
+        }
+
         return getAIResponse(emails);
     }
 
-    private EmailResponseDTO getAIResponse(List<Email> emails){
-        StringBuilder stringBuilder = new StringBuilder();
+    private EmailResponseDTO getAIResponse(List<Email> emails) {
+        List<String> summaries = new ArrayList<>();
         EmailResponseDTO response = new EmailResponseDTO();
+
         try {
-            String message;
             for (Email mail : emails) {
-                message = PromptProvider.getPrompt("summarizationPrompt.txt") +
-                        "Message from: " + mail.sender + " with the subject " + mail.subject + " " + mail.sender + " writes: " + mail.body;
-                String mailTask = AIService.SendRequestAndGetAnswer(HF_URL,HF_TOKEN, LlamaModel,message);
-                Task task = new Task(mailTask);
-                response.tasks.add(task);
-                stringBuilder.append(mailTask);
+                String message = PromptProvider.getPrompt("summarizationPrompt.txt")
+                        + "Message from: " + mail.getSender()
+                        + " with the subject " + mail.getSubject()
+                        + ". " + mail.getSender()
+                        + " writes: " + mail.getBody();
+
+                String mailTask = AIService.SendRequestAndGetAnswer(hfUrl, hfToken, llamaModel, message);
+                if (mailTask == null || mailTask.isBlank()) {
+                    continue;
+                }
+
+                summaries.add(mailTask);
+                response.addTask(new Task(mailTask));
             }
-            stringBuilder.insert(0, PromptProvider.getPrompt("finalSummarizationPrompt.txt") + stringBuilder);
-        } catch (Exception e){
+        } catch (Exception e) {
             e.printStackTrace();
+            response.setResponse("I couldn't summarize your unread emails.");
+            return response;
         }
-        response.response = AIService.SendRequestAndGetAnswer(HF_URL,HF_TOKEN, LlamaModel,stringBuilder.toString());
+
+        if (summaries.isEmpty()) {
+            response.setResponse("I found unread emails, but I couldn't extract a useful summary.");
+            return response;
+        }
+
+        String combinedSummaryPrompt = PromptProvider.getPrompt("finalSummarizationPrompt.txt")
+                + String.join(System.lineSeparator(), summaries);
+        response.setResponse(AIService.SendRequestAndGetAnswer(hfUrl, hfToken, llamaModel, combinedSummaryPrompt));
         return response;
     }
 }

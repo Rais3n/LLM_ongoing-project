@@ -3,16 +3,16 @@ package pl.clockworkjava.model;
 import java.time.LocalDateTime;
 
 public class Task {
-    String name;
-    LocalDateTime dateTime;
-    String oldName;
+    private String name;
+    private LocalDateTime dateTime;
+    private String oldName;
 
-    public Task(String name){
-        this.name=name;
+    public Task(String name) {
+        this.name = name;
     }
 
 
-    public Task(){
+    public Task() {
 
     }
 

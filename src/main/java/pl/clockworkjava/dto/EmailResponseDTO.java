@@ -6,8 +6,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class EmailResponseDTO {
-    public String response;
-    public List<Task> tasks = new ArrayList<>();
+
+    private String response;
+    private List<Task> tasks = new ArrayList<>();
 
     public String getResponse() {
         return response;
@@ -22,6 +23,12 @@ public class EmailResponseDTO {
     }
 
     public void setTasks(List<Task> tasks) {
-        this.tasks = tasks;
+        this.tasks = tasks == null ? new ArrayList<>() : new ArrayList<>(tasks);
+    }
+
+    public void addTask(Task task) {
+        if (task != null) {
+            tasks.add(task);
+        }
     }
 }
